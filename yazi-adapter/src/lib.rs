@@ -32,7 +32,7 @@ pub fn init() -> anyhow::Result<()> {
 	// Tmux support
 	if TMUX.get() {
 		ESCAPE.set("\x1b\x1b");
-		START.set("\x1bPtmux;\x1b\x1b");
+		// START.set("\x1bPtmux;\x1b\x1b");
 		CLOSE.set("\x1b\\");
 		Mux::tmux_passthrough();
 		EMULATOR.set(Emulator::detect().unwrap_or_default());
