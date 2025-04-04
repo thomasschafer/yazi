@@ -1,10 +1,9 @@
-use std::{io::{BufWriter, stderr}, sync::atomic::Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 
-use crossterm::{execute, queue, terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate}};
-use ratatui::{CompletedFrame, backend::{Backend, CrosstermBackend}, buffer::Buffer};
-use scopeguard::defer;
+use crossterm::{cursor::{MoveTo, SetCursorStyle, Show}, execute, queue, terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate}};
+use ratatui::{CompletedFrame, backend::{Backend, CrosstermBackend}, buffer::Buffer, layout::Position};
 use yazi_plugin::elements::COLLISION;
-use yazi_shared::event::NEED_RENDER;
+use yazi_shared::{event::NEED_RENDER, tty::TTY};
 
 use crate::{app::App, lives::Lives, root::Root};
 
@@ -13,22 +12,18 @@ impl App {
 		NEED_RENDER.store(false, Ordering::Relaxed);
 		let Some(term) = &mut self.term else { return };
 
-		queue!(stderr(), BeginSynchronizedUpdate).ok();
-		defer! { execute!(stderr(), EndSynchronizedUpdate).ok(); }
+		Self::routine(true, None);
+		let _guard = scopeguard::guard(self.cx.cursor(), |c| Self::routine(false, c));
 
 		let collision = COLLISION.swap(false, Ordering::Relaxed);
 		let frame = term
 			.draw(|f| {
 				_ = Lives::scope(&self.cx, || Ok(f.render_widget(Root::new(&self.cx), f.area())));
-
-				if let Some(pos) = self.cx.cursor() {
-					f.set_cursor_position(pos);
-				}
 			})
 			.unwrap();
 
 		if COLLISION.load(Ordering::Relaxed) {
-			Self::patch(frame, self.cx.cursor());
+			Self::patch(frame);
 		}
 		if !self.cx.notify.messages.is_empty() {
 			self.render_partially();
@@ -36,7 +31,7 @@ impl App {
 
 		// Reload preview if collision is resolved
 		if collision && !COLLISION.load(Ordering::Relaxed) {
-			self.cx.manager.peek(true);
+			self.cx.mgr.peek(true);
 		}
 	}
 
@@ -46,6 +41,9 @@ impl App {
 			return self.render();
 		}
 
+		Self::routine(true, None);
+		let _guard = scopeguard::guard(self.cx.cursor(), |c| Self::routine(false, c));
+
 		let frame = term
 			.draw_partial(|f| {
 				_ = Lives::scope(&self.cx, || {
@@ -53,20 +51,16 @@ impl App {
 					f.render_widget(crate::notify::Notify::new(&self.cx), f.area());
 					Ok(())
 				});
-
-				if let Some(pos) = self.cx.cursor() {
-					f.set_cursor_position(pos);
-				}
 			})
 			.unwrap();
 
 		if COLLISION.load(Ordering::Relaxed) {
-			Self::patch(frame, self.cx.cursor());
+			Self::patch(frame);
 		}
 	}
 
 	#[inline]
-	fn patch(frame: CompletedFrame, cursor: Option<(u16, u16)>) {
+	fn patch(frame: CompletedFrame) {
 		let mut new = Buffer::empty(frame.area);
 		for y in new.area.top()..new.area.bottom() {
 			for x in new.area.left()..new.area.right() {
@@ -79,12 +73,23 @@ impl App {
 		}
 
 		let patches = frame.buffer.diff(&new);
-		let mut backend = CrosstermBackend::new(BufWriter::new(stderr().lock()));
-		backend.draw(patches.into_iter()).ok();
-		if let Some(pos) = cursor {
-			backend.show_cursor().ok();
-			backend.set_cursor_position(pos).ok();
+		CrosstermBackend::new(&mut *TTY.lockout()).draw(patches.into_iter()).ok();
+	}
+
+	fn routine(push: bool, cursor: Option<(Position, SetCursorStyle)>) {
+		static COUNT: AtomicU8 = AtomicU8::new(0);
+		if push && COUNT.fetch_add(1, Ordering::Relaxed) != 0 {
+			return;
+		} else if !push && COUNT.fetch_sub(1, Ordering::Relaxed) != 1 {
+			return;
 		}
-		backend.flush().ok();
+
+		_ = if push {
+			queue!(TTY.writer(), BeginSynchronizedUpdate)
+		} else if let Some((Position { x, y }, shape)) = cursor {
+			execute!(TTY.writer(), shape, MoveTo(x, y), Show, EndSynchronizedUpdate)
+		} else {
+			execute!(TTY.writer(), EndSynchronizedUpdate)
+		};
 	}
 }

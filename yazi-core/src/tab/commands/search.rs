@@ -1,12 +1,13 @@
 use std::{borrow::Cow, mem, time::Duration};
 
+use anyhow::bail;
 use tokio::pin;
 use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};
 use tracing::error;
 use yazi_config::popup::InputCfg;
-use yazi_fs::{Cha, FilesOp};
+use yazi_fs::{FilesOp, cha::Cha};
 use yazi_plugin::external;
-use yazi_proxy::{AppProxy, InputProxy, ManagerProxy, TabProxy, options::{SearchOpt, SearchOptVia}};
+use yazi_proxy::{AppProxy, InputProxy, MgrProxy, TabProxy, options::{SearchOpt, SearchOptVia}};
 
 use crate::tab::Tab;
 
@@ -36,7 +37,7 @@ impl Tab {
 	}
 
 	pub fn search_do(&mut self, opt: impl TryInto<SearchOpt>) {
-		let Ok(opt) = opt.try_into() else {
+		let Ok(opt): Result<SearchOpt, _> = opt.try_into() else {
 			return error!("Failed to parse search option for `search_do`");
 		};
 
@@ -48,20 +49,26 @@ impl Tab {
 		let hidden = self.pref.show_hidden;
 
 		self.search = Some(tokio::spawn(async move {
-			let rx = if opt.via == SearchOptVia::Rg {
-				external::rg(external::RgOpt {
+			let rx = match opt.via {
+				SearchOptVia::Rg => external::rg(external::RgOpt {
 					cwd: cwd.clone(),
 					hidden,
 					subject: opt.subject.into_owned(),
 					args: opt.args,
-				})
-			} else {
-				external::fd(external::FdOpt {
+				}),
+				SearchOptVia::Rga => external::rga(external::RgaOpt {
 					cwd: cwd.clone(),
 					hidden,
 					subject: opt.subject.into_owned(),
 					args: opt.args,
-				})
+				}),
+				SearchOptVia::Fd => external::fd(external::FdOpt {
+					cwd: cwd.clone(),
+					hidden,
+					subject: opt.subject.into_owned(),
+					args: opt.args,
+				}),
+				SearchOptVia::None => bail!("Invalid `via` option for `search` command"),
 			}?;
 
 			let rx = UnboundedReceiverStream::new(rx).chunks_timeout(5000, Duration::from_millis(500));
@@ -84,7 +91,7 @@ impl Tab {
 		if self.cwd().is_search() {
 			let rep = self.history.remove_or(&self.cwd().to_regular());
 			drop(mem::replace(&mut self.current, rep));
-			ManagerProxy::refresh();
+			MgrProxy::refresh();
 		}
 	}
 }

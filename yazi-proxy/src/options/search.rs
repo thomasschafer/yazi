@@ -24,7 +24,9 @@ impl TryFrom<CmdCow> for SearchOpt {
 			via,
 			subject,
 			// TODO: use second positional argument instead of `args` parameter
-			args: yazi_shared::shell::split_unix(c.str("args").unwrap_or_default()).map_err(|_| ())?,
+			args: yazi_shared::shell::split_unix(c.str("args").unwrap_or_default(), false)
+				.map_err(|_| ())?
+				.0,
 			args_raw: c.take_str("args").unwrap_or_default(),
 		})
 	}
@@ -37,6 +39,7 @@ pub enum SearchOptVia {
 	None,
 	Rg,
 	Fd,
+	Rga,
 }
 
 impl From<&str> for SearchOptVia {
@@ -44,6 +47,7 @@ impl From<&str> for SearchOptVia {
 		match value {
 			"rg" => Self::Rg,
 			"fd" => Self::Fd,
+			"rga" => Self::Rga,
 			_ => Self::None,
 		}
 	}
@@ -54,6 +58,7 @@ impl Display for SearchOptVia {
 		f.write_str(match self {
 			Self::Rg => "rg",
 			Self::Fd => "fd",
+			Self::Rga => "rga",
 			Self::None => "none",
 		})
 	}

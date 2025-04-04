@@ -1,14 +1,14 @@
 use mlua::{AnyUserData, Function, Lua, Table};
 use yazi_config::THEME;
 use yazi_macro::emit;
-use yazi_shared::{Layer, event::Cmd};
+use yazi_shared::event::Cmd;
 
 use super::Utils;
 use crate::{elements::Renderable, file::FileRef};
 
 pub struct SpotLock {
 	pub url:  yazi_shared::url::Url,
-	pub cha:  yazi_fs::Cha,
+	pub cha:  yazi_fs::cha::Cha,
 	pub mime: String,
 
 	pub skip: usize,
@@ -32,6 +32,9 @@ impl TryFrom<Table> for SpotLock {
 }
 
 impl SpotLock {
+	#[inline]
+	pub fn len(&self) -> Option<usize> { Some(self.table()?.len()) }
+
 	pub fn select(&mut self, idx: Option<usize>) {
 		if let Some(t) = self.table_mut() {
 			t.select(idx);
@@ -80,7 +83,7 @@ impl Utils {
 				}),
 				Renderable::Table(table),
 			];
-			emit!(Call(Cmd::new("update_spotted").with_any("lock", lock), Layer::Manager));
+			emit!(Call(Cmd::new("mgr:update_spotted").with_any("lock", lock)));
 
 			Ok(())
 		})
@@ -91,7 +94,7 @@ impl Utils {
 			let mut lock = SpotLock::try_from(t)?;
 			lock.data = widgets.into_iter().map(Renderable::try_from).collect::<mlua::Result<_>>()?;
 
-			emit!(Call(Cmd::new("update_spotted").with_any("lock", lock), Layer::Manager));
+			emit!(Call(Cmd::new("mgr:update_spotted").with_any("lock", lock)));
 			Ok(())
 		})
 	}

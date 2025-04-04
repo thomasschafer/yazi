@@ -1,19 +1,22 @@
 use globset::GlobBuilder;
 use mlua::{ExternalError, ExternalResult, Function, IntoLua, IntoLuaMulti, Lua, Table, Value};
 use tokio::fs;
+use yazi_binding::{Error, Url, UrlRef};
 use yazi_fs::{mounts::PARTITIONS, remove_dir_clean};
 
-use crate::{Composer, Error, bindings::Cha, file::File, url::{Url, UrlRef}};
+use crate::{Composer, bindings::Cha, file::File};
 
 pub fn compose(lua: &Lua) -> mlua::Result<Value> {
 	Composer::make(lua, 10, |lua, key| {
 		match key {
+			b"op" => op(lua)?,
 			b"cwd" => cwd(lua)?,
 			b"cha" => cha(lua)?,
 			b"write" => write(lua)?,
 			b"create" => create(lua)?,
 			b"remove" => remove(lua)?,
 			b"read_dir" => read_dir(lua)?,
+			b"expand_url" => expand_url(lua)?,
 			b"unique_name" => unique_name(lua)?,
 			b"partitions" => partitions(lua)?,
 			_ => return Ok(Value::Nil),
@@ -22,9 +25,17 @@ pub fn compose(lua: &Lua) -> mlua::Result<Value> {
 	})
 }
 
+fn op(lua: &Lua) -> mlua::Result<Function> {
+	lua.create_function(|lua, (name, t): (mlua::String, Table)| match name.as_bytes().as_ref() {
+		b"part" => super::FilesOp::part(lua, t),
+		b"done" => super::FilesOp::done(lua, t),
+		_ => Err("Unknown operation".into_lua_err())?,
+	})
+}
+
 fn cwd(lua: &Lua) -> mlua::Result<Function> {
 	lua.create_function(|lua, ()| match std::env::current_dir() {
-		Ok(p) => (Url::from(p), Value::Nil).into_lua_multi(lua),
+		Ok(p) => (Url::new(p), Value::Nil).into_lua_multi(lua),
 		Err(e) => (Value::Nil, Error::Io(e)).into_lua_multi(lua),
 	})
 }
@@ -129,7 +140,7 @@ fn read_dir(lua: &Lua) -> mlua::Result<Function> {
 			} else {
 				yazi_fs::File::from_dummy(url, next.file_type().await.ok())
 			};
-			files.push(File(file));
+			files.push(File::new(file));
 		}
 
 		let tbl = lua.create_table_with_capacity(files.len(), 0)?;
@@ -141,10 +152,21 @@ fn read_dir(lua: &Lua) -> mlua::Result<Function> {
 	})
 }
 
+fn expand_url(lua: &Lua) -> mlua::Result<Function> {
+	lua.create_function(|_, value: Value| {
+		use yazi_fs::expand_path;
+		Ok(Url::new(match value {
+			Value::String(s) => expand_path(s.to_str()?.as_ref()),
+			Value::UserData(ud) => expand_path(&*ud.borrow::<yazi_shared::url::Url>()?),
+			_ => Err("must be a string or a Url".into_lua_err())?,
+		}))
+	})
+}
+
 fn unique_name(lua: &Lua) -> mlua::Result<Function> {
 	lua.create_async_function(|lua, url: UrlRef| async move {
 		match yazi_fs::unique_name(url.clone(), async { false }).await {
-			Ok(u) => (Url(u), Value::Nil).into_lua_multi(&lua),
+			Ok(u) => (Url::new(u), Value::Nil).into_lua_multi(&lua),
 			Err(e) => (Value::Nil, Error::Io(e)).into_lua_multi(&lua),
 		}
 	})

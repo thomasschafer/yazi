@@ -29,6 +29,9 @@ preview_hovered = { underline = true }
 find_keyword  = { fg = "yellow", bold = true, italic = true, underline = true }
 find_position = { fg = "magenta", bg = "reset", bold = true, italic = true }
 
+# Symlink
+symlink_target = { italic = true }
+
 # Marker
 marker_copied   = { fg = "lightgreen",  bg = "lightgreen" }
 marker_cut      = { fg = "lightred",    bg = "lightred" }
@@ -58,7 +61,6 @@ syntect_theme = ""
 # : Mode {{{
 
 [mode]
-
 normal_main = { bg = "blue", bold = true }
 normal_alt  = { fg = "blue", bg = "gray" }
 
@@ -129,6 +131,10 @@ btn_labels = [ "  [Y]es  ", "  (N)o  " ]
 border = { fg = "blue" }
 title  = { fg = "blue" }
 
+# Table
+tbl_col  = { fg = "blue" }
+tbl_cell = { fg = "yellow", reversed = true }
+
 # : }}}
 
 
@@ -170,7 +176,7 @@ selected = { reversed = true }
 
 # : Completion {{{
 
-[completion]
+[cmp]
 border   = { fg = "blue" }
 active   = { reversed = true }
 inactive = {}
@@ -208,7 +214,6 @@ footer  = { fg = "black", bg = "white" }
 # : File-specific styles {{{
 
 [filetype]
-
 rules = [
 	# Images
 	{ mime = "image/*", fg = "yellow" },
@@ -244,7 +249,6 @@ rules = [
 # : Icons {{{
 
 [icon]
-
 globs = []
 dirs  = [
 	{ name = ".config", text = "" },

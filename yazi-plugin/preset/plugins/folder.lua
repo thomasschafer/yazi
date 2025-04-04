@@ -1,3 +1,5 @@
+--- @sync peek
+
 local M = {}
 
 function M:peek(job)
@@ -8,12 +10,14 @@ function M:peek(job)
 
 	local bound = math.max(0, #folder.files - job.area.h)
 	if job.skip > bound then
-		return ya.manager_emit("peek", { bound, only_if = job.file.url, upper_bound = true })
+		return ya.mgr_emit("peek", { bound, only_if = job.file.url, upper_bound = true })
 	end
 
 	if #folder.files == 0 then
+		local done, err = folder.stage()
+		local s = not done and "Loading..." or not err and "No items" or string.format("Error: %s", err)
 		return ya.preview_widgets(job, {
-			ui.Text(folder.stage.is_loading and "Loading..." or "No items"):area(job.area):align(ui.Text.CENTER),
+			ui.Text(s):area(job.area):align(ui.Text.CENTER),
 		})
 	end
 
@@ -33,7 +37,7 @@ function M:seek(job)
 	if folder and folder.cwd == job.file.url then
 		local step = math.floor(job.units * job.area.h / 10)
 		local bound = math.max(0, #folder.files - job.area.h)
-		ya.manager_emit("peek", {
+		ya.mgr_emit("peek", {
 			ya.clamp(0, cx.active.preview.skip + step, bound),
 			only_if = job.file.url,
 		})

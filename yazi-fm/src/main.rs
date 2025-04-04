@@ -1,11 +1,10 @@
-#![allow(clippy::module_inception)]
-#![allow(clippy::unit_arg)]
+#![allow(clippy::module_inception, clippy::unit_arg)]
 
 #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-yazi_macro::mod_pub!(app completion confirm help input lives manager notify pick spot tasks which);
+yazi_macro::mod_pub!(app cmp confirm help input lives mgr notify pick spot tasks which);
 
 yazi_macro::mod_flat!(context executor logs panic root router signals term);
 

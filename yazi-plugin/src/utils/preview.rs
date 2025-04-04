@@ -1,7 +1,7 @@
 use mlua::{AnyUserData, Function, IntoLuaMulti, Lua, Table, Value};
-use yazi_config::{PREVIEW, preview::PreviewWrap};
+use yazi_config::{YAZI, preview::PreviewWrap};
 use yazi_macro::emit;
-use yazi_shared::{Layer, errors::PeekError, event::Cmd};
+use yazi_shared::{errors::PeekError, event::Cmd};
 
 use super::Utils;
 use crate::{elements::{Area, Rect, Renderable, Text, WRAP, WRAP_NO}, external::Highlighter, file::FileRef};
@@ -9,7 +9,7 @@ use crate::{elements::{Area, Rect, Renderable, Text, WRAP, WRAP_NO}, external::H
 #[derive(Debug, Default)]
 pub struct PreviewLock {
 	pub url:  yazi_shared::url::Url,
-	pub cha:  yazi_fs::Cha,
+	pub cha:  yazi_fs::cha::Cha,
 	pub mime: String,
 
 	pub skip: usize,
@@ -51,10 +51,10 @@ impl Utils {
 			lock.data = vec![Renderable::Text(Text {
 				area,
 				inner,
-				wrap: if PREVIEW.wrap == PreviewWrap::Yes { WRAP } else { WRAP_NO },
+				wrap: if YAZI.preview.wrap == PreviewWrap::Yes { WRAP } else { WRAP_NO },
 			})];
 
-			emit!(Call(Cmd::new("update_peeked").with_any("lock", lock), Layer::Manager));
+			emit!(Call(Cmd::new("mgr:update_peeked").with_any("lock", lock)));
 			(Value::Nil, Value::Nil).into_lua_multi(&lua)
 		})
 	}
@@ -64,7 +64,7 @@ impl Utils {
 			let mut lock = PreviewLock::try_from(t)?;
 			lock.data = widgets.into_iter().map(Renderable::try_from).collect::<mlua::Result<_>>()?;
 
-			emit!(Call(Cmd::new("update_peeked").with_any("lock", lock), Layer::Manager));
+			emit!(Call(Cmd::new("mgr:update_peeked").with_any("lock", lock)));
 			Ok(())
 		})
 	}

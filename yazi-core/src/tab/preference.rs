@@ -1,4 +1,4 @@
-use yazi_config::MANAGER;
+use yazi_config::YAZI;
 use yazi_fs::{FilesSorter, SortBy};
 
 #[derive(Clone, PartialEq)]
@@ -19,15 +19,15 @@ impl Default for Preference {
 	fn default() -> Self {
 		Self {
 			// Sorting
-			sort_by:        MANAGER.sort_by,
-			sort_sensitive: MANAGER.sort_sensitive,
-			sort_reverse:   MANAGER.sort_reverse,
-			sort_dir_first: MANAGER.sort_dir_first,
-			sort_translit:  MANAGER.sort_translit,
+			sort_by:        YAZI.mgr.sort_by,
+			sort_sensitive: YAZI.mgr.sort_sensitive,
+			sort_reverse:   YAZI.mgr.sort_reverse,
+			sort_dir_first: YAZI.mgr.sort_dir_first,
+			sort_translit:  YAZI.mgr.sort_translit,
 
 			// Display
-			linemode:    MANAGER.linemode.to_owned(),
-			show_hidden: MANAGER.show_hidden,
+			linemode:    YAZI.mgr.linemode.to_owned(),
+			show_hidden: YAZI.mgr.show_hidden,
 		}
 	}
 }

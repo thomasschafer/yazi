@@ -1,8 +1,10 @@
 const LABEL_NAME = "needs info"
-const RE_CHECKLIST = /#{3}\s+Checklist\s+(?:^-\s+\[x]\s+.+?\n){2}/gm
+const RE_VERSION = /Yazi\s+Version\s*:\s\d+\.\d+\.\d+\s\(/gm
+const RE_DEPENDENCIES = /Dependencies\s+[/a-z]+\s*:\s/gm
+const RE_CHECKLIST = /#{3}\s+Checklist\s+(?:^-\s+\[x]\s+.+?(?:\n|\r\n|$)){2}/gm
 
 function bugReportBody(creator, content, hash) {
-	if (content.includes(` (${hash} `) && RE_CHECKLIST.test(content)) {
+	if (RE_DEPENDENCIES.test(content) && RE_CHECKLIST.test(content) && new RegExp(` \\(${hash}[a-f0-9]? `).test(content)) {
 		return null
 	}
 
@@ -10,14 +12,14 @@ function bugReportBody(creator, content, hash) {
 
 - The bug can still be reproduced on the [newest nightly build](https://yazi-rs.github.io/docs/installation/#binaries).
 - The debug information (\`yazi --debug\`) is updated for the newest nightly.
-- All required fields in the checklist have been checked.
+- The non-optional items in the checklist are checked.
 
 Issues with \`${LABEL_NAME}\` will be marked ready once edited with the proper content, or closed after 2 days of inactivity.
 `
 }
 
-function featureRequestBody(creator, content, hash) {
-	if (content.includes(` (${hash} `) && RE_CHECKLIST.test(content)) {
+function featureRequestBody(creator, content) {
+	if (RE_VERSION.test(content) && RE_DEPENDENCIES.test(content) && RE_CHECKLIST.test(content)) {
 		return null
 	}
 
@@ -25,7 +27,7 @@ function featureRequestBody(creator, content, hash) {
 
 - The requested feature does not exist in the [newest nightly build](https://yazi-rs.github.io/docs/installation/#binaries).
 - The debug information (\`yazi --debug\`) is updated for the newest nightly.
-- All required fields in the checklist have been checked.
+- The non-optional items in the checklist are checked.
 
 Issues with \`${LABEL_NAME}\` will be marked ready once edited with the proper content, or closed after 2 days of inactivity.
 `
@@ -59,25 +61,58 @@ module.exports = async ({ github, context, core }) => {
 		}
 	}
 
+	async function lastLabeledAt(id) {
+		try {
+			const { data: events } = await github.rest.issues.listEvents({
+				...context.repo,
+				issue_number: id,
+				per_page    : 100,
+			})
+
+			const all = events.filter(v => v.event === "labeled" && v.label?.name === LABEL_NAME)
+			return all.at(-1)?.created_at
+		} catch (e) {
+			core.error(`Error getting label timestamp: ${e.message}`)
+			return null
+		}
+	}
+
+	async function removedLabelManually(id) {
+		try {
+			const { data: events } = await github.rest.issues.listEvents({
+				...context.repo,
+				issue_number: id,
+				per_page    : 100,
+			})
+
+			const all = events.filter(v => v.event === "unlabeled" && v.label?.name === LABEL_NAME)
+			return all.length === 0 ? false : !all.at(-1).actor.login.endsWith("[bot]")
+		} catch (e) {
+			core.error(`Error checking label removal history: ${e.message}`)
+			return false
+		}
+	}
+
 	async function updateLabels(id, mark, body) {
 		try {
 			const marked = await hasLabel(id, LABEL_NAME)
-			if (mark && !marked) {
+
+			if (!mark && marked) {
+				await github.rest.issues.removeLabel({
+					...context.repo,
+					issue_number: id,
+					name        : LABEL_NAME,
+				})
+			} else if (mark && !marked && !await removedLabelManually(id)) {
 				await github.rest.issues.addLabels({
 					...context.repo,
 					issue_number: id,
-					labels: [LABEL_NAME],
+					labels      : [LABEL_NAME],
 				})
 				await github.rest.issues.createComment({
 					...context.repo,
 					issue_number: id,
 					body,
-				})
-			} else if (!mark && marked) {
-				await github.rest.issues.removeLabel({
-					...context.repo,
-					issue_number: id,
-					name: LABEL_NAME,
 				})
 			}
 		} catch (e) {
@@ -89,7 +124,7 @@ module.exports = async ({ github, context, core }) => {
 		try {
 			const { data: issues } = await github.rest.issues.listForRepo({
 				...context.repo,
-				state: "open",
+				state : "open",
 				labels: LABEL_NAME,
 			})
 
@@ -97,18 +132,18 @@ module.exports = async ({ github, context, core }) => {
 			const twoDaysAgo = new Date(now - 2 * 24 * 60 * 60 * 1000)
 
 			for (const issue of issues) {
-				const markedAt = new Date(issue.labels_at || issue.created_at)
+				const markedAt = new Date(await lastLabeledAt(issue.number) || issue.created_at)
 				if (markedAt < twoDaysAgo) {
 					await github.rest.issues.update({
 						...context.repo,
 						issue_number: issue.number,
-						state: "closed",
+						state       : "closed",
 						state_reason: "not_planned",
 					})
 					await github.rest.issues.createComment({
 						...context.repo,
 						issue_number: issue.number,
-						body: `This issue has been automatically closed because it was marked as \`${LABEL_NAME}\` for more than 2 days without updates.
+						body        : `This issue has been automatically closed because it was marked as \`${LABEL_NAME}\` for more than 2 days without updates.
 If the problem persists, please file a new issue and complete the issue template so we can capture all the details necessary to investigate further.`,
 					})
 				}
@@ -136,7 +171,7 @@ If the problem persists, please file a new issue and complete the issue template
 				const body = bugReportBody(creator, content, hash)
 				await updateLabels(id, !!body, body)
 			} else if (await hasLabel(id, "feature")) {
-				const body = featureRequestBody(creator, content, hash)
+				const body = featureRequestBody(creator, content)
 				await updateLabels(id, !!body, body)
 			}
 		}

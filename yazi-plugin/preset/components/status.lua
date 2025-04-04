@@ -25,7 +25,7 @@ function Status:new(area, tab)
 end
 
 function Status:style()
-	local m = THEME.mode
+	local m = th.mode
 	if self._tab.mode.is_select then
 		return { main = m.select_main, alt = m.select_alt }
 	elseif self._tab.mode.is_unset then
@@ -40,22 +40,20 @@ function Status:mode()
 
 	local style = self:style()
 	return ui.Line {
-		ui.Span(THEME.status.sep_left.open):fg(style.main.bg):bg("reset"),
+		ui.Span(th.status.sep_left.open):fg(style.main.bg):bg("reset"),
 		ui.Span(" " .. mode .. " "):style(style.main),
-		ui.Span(THEME.status.sep_left.close):fg(style.main.bg):bg(style.alt.bg),
+		ui.Span(th.status.sep_left.close):fg(style.main.bg):bg(style.alt.bg),
 	}
 end
 
 function Status:size()
 	local h = self._current.hovered
-	if not h then
-		return ""
-	end
+	local size = h and (h:size() or h.cha.len) or 0
 
 	local style = self:style()
 	return ui.Line {
-		ui.Span(" " .. ya.readable_size(h:size() or h.cha.len) .. " "):style(style.alt),
-		ui.Span(THEME.status.sep_left.close):fg(style.alt.bg),
+		ui.Span(" " .. ya.readable_size(size) .. " "):style(style.alt),
+		ui.Span(th.status.sep_left.close):fg(style.alt.bg),
 	}
 end
 
@@ -82,15 +80,15 @@ function Status:perm()
 	local spans = {}
 	for i = 1, #perm do
 		local c = perm:sub(i, i)
-		local style = THEME.status.perm_type
+		local style = th.status.perm_type
 		if c == "-" or c == "?" then
-			style = THEME.status.perm_sep
+			style = th.status.perm_sep
 		elseif c == "r" then
-			style = THEME.status.perm_read
+			style = th.status.perm_read
 		elseif c == "w" then
-			style = THEME.status.perm_write
+			style = th.status.perm_write
 		elseif c == "x" or c == "s" or c == "S" or c == "t" or c == "T" then
-			style = THEME.status.perm_exec
+			style = th.status.perm_exec
 		end
 		spans[i] = ui.Span(c):style(style)
 	end
@@ -115,7 +113,7 @@ function Status:percent()
 
 	local style = self:style()
 	return ui.Line {
-		ui.Span(" " .. THEME.status.sep_right.open):fg(style.alt.bg),
+		ui.Span(" " .. th.status.sep_right.open):fg(style.alt.bg),
 		ui.Span(percent):style(style.alt),
 	}
 end
@@ -126,9 +124,9 @@ function Status:position()
 
 	local style = self:style()
 	return ui.Line {
-		ui.Span(THEME.status.sep_right.open):fg(style.main.bg):bg(style.alt.bg),
+		ui.Span(th.status.sep_right.open):fg(style.main.bg):bg(style.alt.bg),
 		ui.Span(string.format(" %2d/%-2d ", math.min(cursor + 1, length), length)):style(style.main),
-		ui.Span(THEME.status.sep_right.close):fg(style.main.bg):bg("reset"),
+		ui.Span(th.status.sep_right.close):fg(style.main.bg):bg("reset"),
 	}
 end
 
@@ -141,7 +139,7 @@ function Status:redraw()
 	local right_width = right:width()
 
 	return {
-		ui.Text(""):area(self._area):style(THEME.status.overall),
+		ui.Text(""):area(self._area):style(th.status.overall),
 		ui.Text(left):area(self._area),
 		ui.Text(right):area(self._area):align(ui.Text.RIGHT),
 		table.unpack(ya.redraw_with(Progress:new(self._area, right_width))),

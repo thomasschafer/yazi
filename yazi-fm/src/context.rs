@@ -1,42 +1,46 @@
-use ratatui::layout::Rect;
-use yazi_core::{completion::Completion, confirm::Confirm, help::Help, input::Input, manager::Manager, notify::Notify, pick::Pick, tab::{Folder, Tab}, tasks::Tasks, which::Which};
+use crossterm::cursor::SetCursorStyle;
+use ratatui::layout::{Position, Rect};
+use yazi_core::{cmp::Cmp, confirm::Confirm, help::Help, input::Input, mgr::Mgr, notify::Notify, pick::Pick, tab::{Folder, Tab}, tasks::Tasks, which::Which};
 use yazi_shared::Layer;
 
 pub struct Ctx {
-	pub manager:    Manager,
-	pub tasks:      Tasks,
-	pub pick:       Pick,
-	pub input:      Input,
-	pub confirm:    Confirm,
-	pub help:       Help,
-	pub completion: Completion,
-	pub which:      Which,
-	pub notify:     Notify,
+	pub mgr:     Mgr,
+	pub tasks:   Tasks,
+	pub pick:    Pick,
+	pub input:   Input,
+	pub confirm: Confirm,
+	pub help:    Help,
+	pub cmp:     Cmp,
+	pub which:   Which,
+	pub notify:  Notify,
 }
 
 impl Ctx {
 	pub fn make() -> Self {
 		Self {
-			manager:    Manager::make(),
-			tasks:      Tasks::serve(),
-			pick:       Default::default(),
-			input:      Default::default(),
-			confirm:    Default::default(),
-			help:       Default::default(),
-			completion: Default::default(),
-			which:      Default::default(),
-			notify:     Default::default(),
+			mgr:     Mgr::make(),
+			tasks:   Tasks::serve(),
+			pick:    Default::default(),
+			input:   Default::default(),
+			confirm: Default::default(),
+			help:    Default::default(),
+			cmp:     Default::default(),
+			which:   Default::default(),
+			notify:  Default::default(),
 		}
 	}
 
 	#[inline]
-	pub fn cursor(&self) -> Option<(u16, u16)> {
+	pub fn cursor(&self) -> Option<(Position, SetCursorStyle)> {
 		if self.input.visible {
-			let Rect { x, y, .. } = self.manager.area(self.input.position);
-			return Some((x + 1 + self.input.cursor(), y + 1));
+			let Rect { x, y, .. } = self.mgr.area(self.input.position);
+			return Some((
+				Position { x: x + 1 + self.input.cursor(), y: y + 1 },
+				self.input.cursor_shape(),
+			));
 		}
 		if let Some((x, y)) = self.help.cursor() {
-			return Some((x, y));
+			return Some((Position { x, y }, self.help.cursor_shape()));
 		}
 		None
 	}
@@ -45,8 +49,8 @@ impl Ctx {
 	pub fn layer(&self) -> Layer {
 		if self.which.visible {
 			Layer::Which
-		} else if self.completion.visible {
-			Layer::Completion
+		} else if self.cmp.visible {
+			Layer::Cmp
 		} else if self.help.visible {
 			Layer::Help
 		} else if self.confirm.visible {
@@ -60,21 +64,21 @@ impl Ctx {
 		} else if self.tasks.visible {
 			Layer::Tasks
 		} else {
-			Layer::Manager
+			Layer::Mgr
 		}
 	}
 }
 
 impl Ctx {
 	#[inline]
-	pub fn active(&self) -> &Tab { self.manager.active() }
+	pub fn active(&self) -> &Tab { self.mgr.active() }
 
 	#[inline]
-	pub fn active_mut(&mut self) -> &mut Tab { self.manager.active_mut() }
+	pub fn active_mut(&mut self) -> &mut Tab { self.mgr.active_mut() }
 
 	#[inline]
-	pub fn current(&self) -> &Folder { self.manager.current() }
+	pub fn current(&self) -> &Folder { self.mgr.current() }
 
 	#[inline]
-	pub fn current_mut(&mut self) -> &mut Folder { self.manager.current_mut() }
+	pub fn current_mut(&mut self) -> &mut Folder { self.mgr.current_mut() }
 }

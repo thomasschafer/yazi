@@ -4,8 +4,8 @@ use tokio::{pin, task::JoinHandle};
 use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};
 use tokio_util::sync::CancellationToken;
 use yazi_adapter::ADAPTOR;
-use yazi_config::PLUGIN;
-use yazi_fs::{Cha, File, Files, FilesOp};
+use yazi_config::YAZI;
+use yazi_fs::{File, Files, FilesOp, cha::Cha};
 use yazi_macro::render;
 use yazi_plugin::{external::Highlighter, isolate, utils::PreviewLock};
 use yazi_shared::{MIME_DIR, url::Url};
@@ -27,16 +27,12 @@ impl Preview {
 			return;
 		}
 
-		let Some(previewer) = PLUGIN.previewer(&file.url, &mime) else {
+		let Some(previewer) = YAZI.plugin.previewer(&file.url, &mime) else {
 			return self.reset();
 		};
 
 		self.abort();
-		if previewer.sync {
-			isolate::peek_sync(&previewer.run, file, mime, self.skip);
-		} else {
-			self.previewer_ct = Some(isolate::peek(&previewer.run, file, mime, self.skip));
-		}
+		self.previewer_ct = isolate::peek(&previewer.run, file, mime, self.skip);
 	}
 
 	pub fn go_folder(&mut self, file: File, dir: Option<Cha>, force: bool) {
@@ -53,7 +49,11 @@ impl Preview {
 		self.folder_loader.take().map(|h| h.abort());
 		self.folder_loader = Some(tokio::spawn(async move {
 			let Some(new) = Files::assert_stale(&wd, dir.unwrap_or(Cha::dummy())).await else { return };
-			let Ok(rx) = Files::from_dir(&wd).await else { return };
+
+			let rx = match Files::from_dir(&wd).await {
+				Ok(rx) => rx,
+				Err(e) => return FilesOp::issue_error(&wd, e.kind()).await,
+			};
 
 			let stream =
 				UnboundedReceiverStream::new(rx).chunks_timeout(50000, Duration::from_millis(500));

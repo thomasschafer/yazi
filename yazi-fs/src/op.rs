@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use yazi_shared::{Id, Ids, Layer, event::Cmd, url::{Url, UrnBuf}};
+use yazi_shared::{Id, Ids, event::Cmd, url::{Url, UrnBuf}};
 
-use super::{Cha, File};
+use super::File;
+use crate::{cha::Cha, maybe_exists};
 
 pub static FILES_TICKET: Ids = Ids::new();
 
@@ -39,11 +40,8 @@ impl FilesOp {
 
 	#[inline]
 	pub fn emit(self) {
-		yazi_shared::event::Event::Call(
-			Cmd::new("update_files").with_any("op", self).into(),
-			Layer::Manager,
-		)
-		.emit();
+		yazi_shared::event::Event::Call(Cmd::new("mgr:update_files").with_any("op", self).into())
+			.emit();
 	}
 
 	pub fn prepare(cwd: &Url) -> Id {
@@ -117,6 +115,17 @@ impl FilesOp {
 			Self::Deleting(_, urns) => Self::Deleting(n, urns.clone()),
 			Self::Updating(_, map) => Self::Updating(n, map!(map)),
 			Self::Upserting(_, map) => Self::Upserting(n, map!(map)),
+		}
+	}
+
+	pub async fn issue_error(cwd: &Url, kind: std::io::ErrorKind) {
+		use std::io::ErrorKind;
+		if kind != ErrorKind::NotFound {
+			Self::IOErr(cwd.clone(), kind).emit();
+		} else if maybe_exists(cwd).await {
+			Self::IOErr(cwd.clone(), kind).emit();
+		} else if let Some((p, n)) = cwd.pair() {
+			Self::Deleting(p, HashSet::from_iter([n])).emit();
 		}
 	}
 

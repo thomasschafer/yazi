@@ -5,10 +5,10 @@ use crate::Composer;
 pub(super) struct Utils;
 
 pub fn compose(lua: &Lua, isolate: bool) -> mlua::Result<Value> {
-	Composer::make(lua, 40, move |lua, key| {
+	Composer::make(lua, 45, move |lua, key| {
 		match key {
 			// App
-			b"__250127" => Utils::hide(lua)?, // TODO: remove this
+			b"id" => Utils::id(lua)?,
 			b"hide" => Utils::hide(lua)?,
 
 			// Cache
@@ -18,7 +18,8 @@ pub fn compose(lua: &Lua, isolate: bool) -> mlua::Result<Value> {
 			b"render" => Utils::render(lua)?,
 			b"redraw_with" => Utils::redraw_with(lua)?,
 			b"app_emit" => Utils::app_emit(lua)?,
-			b"manager_emit" => Utils::manager_emit(lua)?,
+			b"mgr_emit" => Utils::mgr_emit(lua)?,
+			b"manager_emit" => Utils::mgr_emit(lua)?, // TODO: remove this in the future
 			b"input_emit" => Utils::input_emit(lua)?,
 
 			// Image
@@ -59,7 +60,6 @@ pub fn compose(lua: &Lua, isolate: bool) -> mlua::Result<Value> {
 			b"target_family" => Utils::target_family(lua)?,
 
 			// Text
-			b"md5" => Utils::hash(lua, true)?, // TODO: deprecate this in the future
 			b"hash" => Utils::hash(lua, false)?,
 			b"quote" => Utils::quote(lua)?,
 			b"truncate" => Utils::truncate(lua)?,

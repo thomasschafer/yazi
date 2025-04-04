@@ -1,49 +1,39 @@
-use std::{path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 
-use anyhow::Context;
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
-use validator::Validate;
+use yazi_codegen::{DeserializeOver1, DeserializeOver2};
+use yazi_fs::expand_path;
 use yazi_shared::theme::Style;
 
-use super::{Filetype, Flavor, Icons};
+use super::{Filetype, Flavor, Icon};
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, DeserializeOver1, Serialize)]
 pub struct Theme {
-	pub flavor:     Flavor,
-	pub manager:    Manager,
-	mode:           Mode,
-	status:         Status,
-	pub which:      Which,
-	pub confirm:    Confirm,
-	pub spot:       Spot,
-	pub notify:     Notify,
-	pub pick:       Pick,
-	pub input:      Input,
-	pub completion: Completion,
-	pub tasks:      Tasks,
-	pub help:       Help,
+	pub flavor:  Flavor,
+	#[serde(rename = "manager")]
+	pub mgr:     Mgr, // TODO: Remove `serde(rename)`
+	pub mode:    Mode,
+	pub status:  Status,
+	pub which:   Which,
+	pub confirm: Confirm,
+	pub spot:    Spot,
+	pub notify:  Notify,
+	pub pick:    Pick,
+	pub input:   Input,
+	pub cmp:     Cmp,
+	pub tasks:   Tasks,
+	pub help:    Help,
 
 	// File-specific styles
-	#[serde(rename = "filetype", deserialize_with = "Filetype::deserialize", skip_serializing)]
-	pub filetypes: Vec<Filetype>,
-	#[serde(rename = "icon", skip_serializing)]
-	pub icons:     Icons,
+	#[serde(skip_serializing)]
+	pub filetype: Filetype,
+	#[serde(skip_serializing)]
+	pub icon:     Icon,
 }
 
-impl FromStr for Theme {
-	type Err = anyhow::Error;
-
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		let theme: Self = toml::from_str(s).context("Failed to parse your theme.toml")?;
-		theme.manager.validate()?;
-		theme.which.validate()?;
-
-		Ok(theme)
-	}
-}
-
-#[derive(Deserialize, Serialize, Validate)]
-pub struct Manager {
+#[derive(Deserialize, DeserializeOver2, Serialize)]
+pub struct Mgr {
 	cwd: Style,
 
 	// Hovered
@@ -54,6 +44,9 @@ pub struct Manager {
 	find_keyword:  Style,
 	find_position: Style,
 
+	// Symlink
+	symlink_target: Style,
+
 	// Marker
 	marker_copied:   Style,
 	marker_cut:      Style,
@@ -63,7 +56,6 @@ pub struct Manager {
 	// Tab
 	tab_active:   Style,
 	tab_inactive: Style,
-	#[validate(range(min = 1, message = "Must be greater than 0"))]
 	tab_width:    u8,
 
 	// Count
@@ -79,8 +71,8 @@ pub struct Manager {
 	pub syntect_theme: PathBuf,
 }
 
-#[derive(Deserialize, Serialize)]
-struct Mode {
+#[derive(Deserialize, DeserializeOver2, Serialize)]
+pub struct Mode {
 	pub normal_main: Style,
 	pub normal_alt:  Style,
 
@@ -91,8 +83,8 @@ struct Mode {
 	pub unset_alt:  Style,
 }
 
-#[derive(Deserialize, Serialize)]
-struct Status {
+#[derive(Deserialize, DeserializeOver2, Serialize)]
+pub struct Status {
 	pub overall:   Style,
 	pub sep_left:  StatusSep,
 	pub sep_right: StatusSep,
@@ -110,15 +102,14 @@ struct Status {
 	pub progress_error:  Style,
 }
 
-#[derive(Deserialize, Serialize)]
-struct StatusSep {
+#[derive(Deserialize, DeserializeOver2, Serialize)]
+pub struct StatusSep {
 	pub open:  String,
 	pub close: String,
 }
 
-#[derive(Deserialize, Serialize, Validate)]
+#[derive(Deserialize, DeserializeOver2, Serialize)]
 pub struct Which {
-	#[validate(range(min = 1, max = 3, message = "Must be between 1 and 3"))]
 	pub cols: u8,
 	pub mask: Style,
 	pub cand: Style,
@@ -129,24 +120,28 @@ pub struct Which {
 	pub separator_style: Style,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, DeserializeOver2, Serialize)]
 pub struct Confirm {
-	pub border:     Style,
-	pub title:      Style,
-	pub content:    Style,
-	pub list:       Style,
+	pub border:  Style,
+	pub title:   Style,
+	pub content: Style,
+	pub list:    Style,
+
 	pub btn_yes:    Style,
 	pub btn_no:     Style,
 	pub btn_labels: [String; 2],
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, DeserializeOver2, Serialize)]
 pub struct Spot {
 	pub border: Style,
 	pub title:  Style,
+
+	pub tbl_col:  Style,
+	pub tbl_cell: Style,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, DeserializeOver2, Serialize)]
 pub struct Notify {
 	pub title_info:  Style,
 	pub title_warn:  Style,
@@ -157,14 +152,14 @@ pub struct Notify {
 	pub icon_error: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, DeserializeOver2, Serialize)]
 pub struct Pick {
 	pub border:   Style,
 	pub active:   Style,
 	pub inactive: Style,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, DeserializeOver2, Serialize)]
 pub struct Input {
 	pub border:   Style,
 	pub title:    Style,
@@ -172,8 +167,8 @@ pub struct Input {
 	pub selected: Style,
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct Completion {
+#[derive(Deserialize, DeserializeOver2, Serialize)]
+pub struct Cmp {
 	pub border:   Style,
 	pub active:   Style,
 	pub inactive: Style,
@@ -183,14 +178,14 @@ pub struct Completion {
 	pub icon_command: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, DeserializeOver2, Serialize)]
 pub struct Tasks {
 	pub border:  Style,
 	pub title:   Style,
 	pub hovered: Style,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, DeserializeOver2, Serialize)]
 pub struct Help {
 	pub on:   Style,
 	pub run:  Style,
@@ -198,4 +193,21 @@ pub struct Help {
 
 	pub hovered: Style,
 	pub footer:  Style,
+}
+
+impl Theme {
+	pub(crate) fn reshape(mut self, light: bool) -> Result<Self> {
+		if self.mgr.tab_width < 1 {
+			bail!("[mgr].tab_width must be greater than 0");
+		} else if self.which.cols < 1 || self.which.cols > 3 {
+			bail!("[which].cols must be between 1 and 3");
+		}
+
+		self.icon = self.icon.reshape()?;
+
+		self.mgr.syntect_theme =
+			self.flavor.syntect_path(light).unwrap_or_else(|| expand_path(&self.mgr.syntect_theme));
+
+		Ok(self)
+	}
 }

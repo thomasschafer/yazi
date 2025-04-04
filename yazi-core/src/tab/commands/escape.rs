@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 use yazi_macro::{render, render_and};
-use yazi_proxy::{AppProxy, ManagerProxy};
+use yazi_proxy::{AppProxy, MgrProxy};
 use yazi_shared::event::CmdCow;
 
 use crate::tab::Tab;
@@ -87,7 +87,7 @@ impl Tab {
 
 		self.selected.clear();
 		if self.hovered().is_some_and(|h| h.is_dir()) {
-			ManagerProxy::peek(true);
+			MgrProxy::peek(true);
 		}
 		render_and!(true)
 	}
@@ -109,10 +109,9 @@ impl Tab {
 		let urls: Vec<_> =
 			indices.into_iter().filter_map(|i| self.current.files.get(i)).map(|f| &f.url).collect();
 
-		let same = !self.cwd().is_search();
 		if !select {
-			self.selected.remove_many(&urls, same);
-		} else if self.selected.add_many(&urls, same) != urls.len() {
+			self.selected.remove_many(&urls);
+		} else if self.selected.add_many(&urls) != urls.len() {
 			AppProxy::notify_warn(
 				"Escape visual mode",
 				"Some files cannot be selected, due to path nesting conflict.",

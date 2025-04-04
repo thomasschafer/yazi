@@ -6,7 +6,7 @@ function M:setup()
 	ps.sub_remote("extract", function(args)
 		local noisy = #args == 1 and ' "" --noisy' or ' ""'
 		for _, arg in ipairs(args) do
-			ya.manager_emit("plugin", { self._id, ya.quote(arg, true) .. noisy })
+			ya.mgr_emit("plugin", { self._id, ya.quote(arg, true) .. noisy })
 		end
 	end)
 end
@@ -27,7 +27,7 @@ function M:entry(job)
 		end
 
 		local value, event = ya.input {
-			title = string.format('Password for "%s":', from:name()),
+			title = string.format('Password for "%s":', from.name),
 			position = { "center", w = 50 },
 		}
 		if event == 1 then
@@ -57,7 +57,7 @@ function M:try_with(from, pwd, to)
 
 	local output, err = child:wait_with_output()
 	if output and output.status.code == 2 and archive.is_encrypted(output.stderr) then
-		fs.remove("dir_clean", tmp)
+		fs.remove("dir_all", tmp)
 		return true -- Need to retry
 	end
 
@@ -90,7 +90,7 @@ function M:tidy(from, to, tmp)
 	if only then
 		target = to:join(outs[1].name)
 	else
-		target = to:join(self.trim_ext(from:name()))
+		target = to:join(self.trim_ext(from.name))
 	end
 
 	target = fs.unique_name(target)

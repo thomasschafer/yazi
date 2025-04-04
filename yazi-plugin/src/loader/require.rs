@@ -13,11 +13,11 @@ impl Require {
 			"require",
 			lua.create_function(|lua, id: mlua::String| {
 				let s = &id.to_str()?;
-				futures::executor::block_on(LOADER.ensure(s)).into_lua_err()?;
+				futures::executor::block_on(LOADER.ensure(s, |_| ())).into_lua_err()?;
 
-				lua.named_registry_value::<RtRefMut>("rt")?.push(s);
+				lua.named_registry_value::<RtRefMut>("ir")?.push(s);
 				let mod_ = LOADER.load(lua, s);
-				lua.named_registry_value::<RtRefMut>("rt")?.pop();
+				lua.named_registry_value::<RtRefMut>("ir")?.pop();
 
 				Self::create_mt(lua, s, mod_?, true)
 			})?,
@@ -29,11 +29,11 @@ impl Require {
 			"require",
 			lua.create_async_function(|lua, id: mlua::String| async move {
 				let s = &id.to_str()?;
-				LOADER.ensure(s).await.into_lua_err()?;
+				LOADER.ensure(s, |_| ()).await.into_lua_err()?;
 
-				lua.named_registry_value::<RtRefMut>("rt")?.push(s);
+				lua.named_registry_value::<RtRefMut>("ir")?.push(s);
 				let mod_ = LOADER.load(&lua, s);
-				lua.named_registry_value::<RtRefMut>("rt")?.pop();
+				lua.named_registry_value::<RtRefMut>("ir")?.pop();
 
 				Self::create_mt(&lua, s, mod_?, false)
 			})?,
@@ -73,9 +73,9 @@ impl Require {
 		if sync {
 			lua.create_function(move |lua, args: MultiValue| {
 				let (mod_, args) = Self::split_mod_and_args(lua, &id, args)?;
-				lua.named_registry_value::<RtRefMut>("rt")?.push(&id);
+				lua.named_registry_value::<RtRefMut>("ir")?.push(&id);
 				let result = mod_.call_function::<MultiValue>(&f, args);
-				lua.named_registry_value::<RtRefMut>("rt")?.pop();
+				lua.named_registry_value::<RtRefMut>("ir")?.pop();
 				result
 			})
 		} else {
@@ -83,9 +83,9 @@ impl Require {
 				let (id, f) = (id.clone(), f.clone());
 				async move {
 					let (mod_, args) = Self::split_mod_and_args(&lua, &id, args)?;
-					lua.named_registry_value::<RtRefMut>("rt")?.push(&id);
+					lua.named_registry_value::<RtRefMut>("ir")?.push(&id);
 					let result = mod_.call_async_function::<MultiValue>(&f, args).await;
-					lua.named_registry_value::<RtRefMut>("rt")?.pop();
+					lua.named_registry_value::<RtRefMut>("ir")?.pop();
 					result
 				}
 			})

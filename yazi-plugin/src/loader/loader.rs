@@ -1,7 +1,7 @@
-use std::{collections::HashMap, ops::Deref};
+use std::{borrow::Cow, collections::HashMap, ops::Deref};
 
 use anyhow::{Context, Result, bail};
-use mlua::{ExternalError, Lua, Table};
+use mlua::{ChunkMode, ExternalError, Lua, Table};
 use parking_lot::RwLock;
 use tokio::fs;
 use yazi_boot::BOOT;
@@ -42,6 +42,7 @@ impl Default for Loader {
 			("noop".to_owned(), preset!("plugins/noop").into()),
 			("pdf".to_owned(), preset!("plugins/pdf").into()),
 			("session".to_owned(), preset!("plugins/session").into()),
+			("svg".to_owned(), preset!("plugins/svg").into()),
 			("video".to_owned(), preset!("plugins/video").into()),
 			("zoxide".to_owned(), preset!("plugins/zoxide").into()),
 		]);
@@ -50,39 +51,23 @@ impl Default for Loader {
 }
 
 impl Loader {
-	pub async fn ensure(&self, name: &str) -> Result<()> {
-		if let Some(chunk) = self.cache.read().get(name) {
-			return Self::compatible_or_error(name, chunk);
+	pub async fn ensure<F, T>(&self, name: &str, f: F) -> Result<T>
+	where
+		F: FnOnce(&Chunk) -> T,
+	{
+		if let Some(c) = self.cache.read().get(name) {
+			return Self::compatible_or_error(name, c).map(|_| f(c));
 		}
 
-		// TODO: remove this
 		let p = BOOT.plugin_dir.join(format!("{name}.yazi/main.lua"));
-		let chunk = match fs::read(&p).await {
-			Ok(b) => b,
-			Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-				static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-				if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
-					yazi_proxy::AppProxy::notify(yazi_proxy::options::NotifyOpt {
-						title:   "Deprecated entry file".to_owned(),
-						content: format!(
-							"The plugin's entry file `init.lua` has been deprecated in favor of the new `main.lua` (user's own `init.lua` remains unchanged).
+		let chunk =
+			fs::read(&p).await.with_context(|| format!("Failed to load plugin from {p:?}"))?.into();
 
-Please run `ya pack -m` to automatically migrate all plugins, or manually rename your `{name}.yazi/init.lua` to `{name}.yazi/main.lua`."
-						),
-						level:   yazi_proxy::options::NotifyLevel::Warn,
-						timeout: std::time::Duration::from_secs(25),
-					});
-				}
+		let result = Self::compatible_or_error(name, &chunk);
+		let inspect = f(&chunk);
 
-				let p = BOOT.plugin_dir.join(format!("{name}.yazi/init.lua"));
-				fs::read(&p).await.with_context(|| format!("Failed to load plugin from {p:?}"))?
-			}
-			Err(e) => Err(e).with_context(|| format!("Failed to load plugin from {p:?}"))?,
-		};
-
-		let mut cache = self.cache.write();
-		cache.insert(name.to_owned(), chunk.into());
-		Self::compatible_or_error(name, cache.get(name).unwrap())
+		self.cache.write().insert(name.to_owned(), chunk);
+		result.map(|_| inspect)
 	}
 
 	pub fn load(&self, lua: &Lua, id: &str) -> mlua::Result<Table> {
@@ -91,14 +76,32 @@ Please run `ya pack -m` to automatically migrate all plugins, or manually rename
 			return Ok(t);
 		}
 
-		let t: Table = match self.read().get(id) {
-			Some(c) => lua.load(c.as_bytes()).set_name(id).call(())?,
-			None => Err(format!("plugin `{id}` not found").into_lua_err())?,
-		};
-
+		let t = self.load_once(lua, id)?;
 		t.raw_set("_id", lua.create_string(id)?)?;
+
 		loaded.raw_set(id, t.clone())?;
 		Ok(t)
+	}
+
+	pub fn load_once(&self, lua: &Lua, id: &str) -> mlua::Result<Table> {
+		let mut mode = ChunkMode::Text;
+		let f = match self.read().get(id) {
+			Some(c) => {
+				mode = c.mode;
+				lua.load(c).set_name(id).into_function()
+			}
+			None => Err(format!("plugin `{id}` not found").into_lua_err()),
+		}?;
+
+		if mode != ChunkMode::Binary {
+			let b = f.dump(true);
+			if let Some(c) = self.write().get_mut(id) {
+				c.mode = ChunkMode::Binary;
+				c.bytes = Cow::Owned(b);
+			}
+		}
+
+		f.call(())
 	}
 
 	pub fn try_load(&self, lua: &Lua, id: &str) -> mlua::Result<Table> {
@@ -111,7 +114,7 @@ Please run `ya pack -m` to automatically migrate all plugins, or manually rename
 			return Ok(t);
 		}
 
-		let t: Table = lua.load(chunk.as_bytes()).set_name(id).call(())?;
+		let t: Table = lua.load(chunk).set_name(id).call(())?;
 		t.raw_set("_id", lua.create_string(id)?)?;
 
 		loaded.raw_set(id, t.clone())?;

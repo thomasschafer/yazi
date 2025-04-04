@@ -5,7 +5,7 @@ use base64::{Engine, engine::{Config, general_purpose::STANDARD}};
 use crossterm::{cursor::MoveTo, queue};
 use image::{DynamicImage, ExtendedColorType, ImageEncoder, codecs::{jpeg::JpegEncoder, png::PngEncoder}};
 use ratatui::layout::Rect;
-use yazi_config::PREVIEW;
+use yazi_config::YAZI;
 
 use crate::{CLOSE, Emulator, Image, START, adapter::Adapter};
 
@@ -19,18 +19,18 @@ impl Iip {
 
 		Adapter::Iip.image_hide()?;
 		Adapter::shown_store(area);
-		Emulator::move_lock((max.x, max.y), |stderr| {
-			stderr.write_all(&b)?;
+		Emulator::move_lock((max.x, max.y), |w| {
+			w.write_all(&b)?;
 			Ok(area)
 		})
 	}
 
 	pub(crate) fn image_erase(area: Rect) -> Result<()> {
 		let s = " ".repeat(area.width as usize);
-		Emulator::move_lock((0, 0), |stderr| {
+		Emulator::move_lock((0, 0), |w| {
 			for y in area.top()..area.bottom() {
-				queue!(stderr, MoveTo(area.x, y))?;
-				write!(stderr, "{s}")?;
+				queue!(w, MoveTo(area.x, y))?;
+				write!(w, "{s}")?;
 			}
 			Ok(())
 		})
@@ -44,7 +44,7 @@ impl Iip {
 			if img.color().has_alpha() {
 				PngEncoder::new(&mut b).write_image(&img.into_rgba8(), w, h, ExtendedColorType::Rgba8)?;
 			} else {
-				JpegEncoder::new_with_quality(&mut b, PREVIEW.image_quality).encode_image(&img)?;
+				JpegEncoder::new_with_quality(&mut b, YAZI.preview.image_quality).encode_image(&img)?;
 			};
 
 			let mut buf = String::with_capacity(

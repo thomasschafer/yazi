@@ -18,7 +18,7 @@ function Entity:icon()
 	local icon = self._file:icon()
 	if not icon then
 		return ""
-	elseif self._file:is_hovered() then
+	elseif self._file.is_hovered then
 		return icon.text .. " "
 	else
 		return ui.Line(icon.text .. " "):style(icon.style)
@@ -42,7 +42,7 @@ function Entity:highlights()
 		if h[1] > last then
 			spans[#spans + 1] = name:sub(last + 1, h[1])
 		end
-		spans[#spans + 1] = ui.Span(name:sub(h[1] + 1, h[2])):style(THEME.manager.find_keyword)
+		spans[#spans + 1] = ui.Span(name:sub(h[1] + 1, h[2])):style(th.mgr.find_keyword)
 		last = h[2]
 	end
 	if last < #name then
@@ -52,7 +52,7 @@ function Entity:highlights()
 end
 
 function Entity:found()
-	if not self._file:is_hovered() then
+	if not self._file.is_hovered then
 		return ""
 	end
 
@@ -64,16 +64,16 @@ function Entity:found()
 	end
 
 	local s = string.format("[%d/%s]", found[1] + 1, found[2] >= 100 and "99+" or found[2])
-	return ui.Line { "  ", ui.Span(s):style(THEME.manager.find_position) }
+	return ui.Line { "  ", ui.Span(s):style(th.mgr.find_position) }
 end
 
 function Entity:symlink()
-	if not MANAGER.show_symlink then
+	if not rt.mgr.show_symlink then
 		return ""
 	end
 
 	local to = self._file.link_to
-	return to and ui.Span(string.format(" -> %s", to)):italic() or ""
+	return to and ui.Span(string.format(" -> %s", to)):style(th.mgr.symlink_target) or ""
 end
 
 function Entity:redraw()
@@ -86,12 +86,12 @@ end
 
 function Entity:style()
 	local s = self._file:style()
-	if not self._file:is_hovered() then
+	if not self._file.is_hovered then
 		return s
-	elseif self._file:in_preview() then
-		return s and s:patch(THEME.manager.preview_hovered) or THEME.manager.preview_hovered
+	elseif self._file.in_preview then
+		return s and s:patch(th.mgr.preview_hovered) or th.mgr.preview_hovered
 	else
-		return s and s:patch(THEME.manager.hovered) or THEME.manager.hovered
+		return s and s:patch(th.mgr.hovered) or th.mgr.hovered
 	end
 end
 

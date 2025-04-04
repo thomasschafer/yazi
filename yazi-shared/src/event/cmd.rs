@@ -1,32 +1,43 @@
-use std::{any::Any, borrow::Cow, collections::HashMap, fmt::{self, Display}, mem, str::FromStr};
+use std::{any::Any, borrow::Cow, collections::HashMap, fmt::{self, Display}, str::FromStr};
 
 use anyhow::{Result, bail};
 use serde::{Deserialize, de};
 
 use super::{Data, DataKey};
-use crate::url::Url;
+use crate::{Layer, url::Url};
 
 #[derive(Debug, Default)]
 pub struct Cmd {
-	pub name: String,
-	pub args: HashMap<DataKey, Data>,
+	pub name:  String,
+	pub args:  HashMap<DataKey, Data>,
+	pub layer: Layer,
 }
 
 impl Cmd {
-	#[inline]
-	pub fn new(name: &str) -> Self { Self { name: name.to_owned(), ..Default::default() } }
+	pub fn new(s: &str) -> Self {
+		let (layer, name) = match s.split_once(':') {
+			Some((l, n)) => (Layer::from_str(l).unwrap_or_default(), n),
+			None => (Layer::default(), s),
+		};
+
+		Self { name: name.to_owned(), args: Default::default(), layer }
+	}
+
+	pub fn args(name: &str, args: &[impl ToString]) -> Self {
+		let mut me = Self::new(name);
+		me.args = args
+			.iter()
+			.enumerate()
+			.map(|(i, s)| (DataKey::Integer(i as i64), Data::String(s.to_string())))
+			.collect();
+		me
+	}
 
 	#[inline]
-	pub fn args(name: &str, args: &[impl ToString]) -> Self {
-		Self {
-			name: name.to_owned(),
-			args: args
-				.iter()
-				.enumerate()
-				.map(|(i, s)| (DataKey::Integer(i as i64), Data::String(s.to_string())))
-				.collect(),
-		}
-	}
+	pub fn len(&self) -> usize { self.args.len() }
+
+	#[inline]
+	pub fn is_empty(&self) -> bool { self.args.is_empty() }
 
 	// --- With
 	#[inline]
@@ -114,13 +125,16 @@ impl Cmd {
 	// Parse
 	pub fn parse_args(
 		words: impl Iterator<Item = String>,
+		last: Option<String>,
 		obase: bool,
 	) -> Result<HashMap<DataKey, Data>> {
 		let mut i = 0i64;
 		words
 			.into_iter()
-			.map(|word| {
-				let Some(arg) = word.strip_prefix("--") else {
+			.map(|s| (s, true))
+			.chain(last.into_iter().map(|s| (s, false)))
+			.map(|(word, normal)| {
+				let Some(arg) = word.strip_prefix("--").filter(|_| normal) else {
 					i += 1;
 					return Ok((DataKey::Integer(i - obase as i64), Data::String(word)));
 				};
@@ -169,17 +183,15 @@ impl Display for Cmd {
 impl FromStr for Cmd {
 	type Err = anyhow::Error;
 
-	#[allow(clippy::explicit_counter_loop)]
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		let mut args = crate::shell::split_unix(s)?;
-		if args.is_empty() || args[0].is_empty() {
+		let (words, last) = crate::shell::split_unix(s, true)?;
+		if words.is_empty() || words[0].is_empty() {
 			bail!("command name cannot be empty");
 		}
 
-		Ok(Cmd {
-			name: mem::take(&mut args[0]),
-			args: Cmd::parse_args(args.into_iter().skip(1), true)?,
-		})
+		let mut me = Self::new(&words[0]);
+		me.args = Cmd::parse_args(words.into_iter().skip(1), last, true)?;
+		Ok(me)
 	}
 }
 
